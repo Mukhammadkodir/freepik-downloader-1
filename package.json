@@ -9,9 +9,15 @@
     "build": "tsc --build --clean && tsc",
     "api": "node dist/api/api.js",
     "api-no-queue": "node dist/api/api-no-queue.js",
+    "link-api": "node dist/api/link-api.js",
+    "telegram-bot": "node dist/telegram-bot.js",
     "dev:api": "ts-node src/api/api.ts",
+    "dev:link-api": "ts-node src/api/link-api.ts",
+    "dev:telegram-bot": "ts-node src/telegram-bot.ts",
     "test": "ts-node test/test.ts",
-    "test:queue": "ts-node test/queue.ts"
+    "test:queue": "ts-node test/queue.ts",
+    "test:link": "ts-node test/extract-link.ts",
+    "validate": "node validate-setup.js"
   },
   "repository": {
     "type": "git",
@@ -35,6 +41,7 @@
     "express": "^4.18.1",
     "fs-extra": "^10.1.0",
     "mime-types": "^2.1.35",
+    "node-telegram-bot-api": "^0.61.0",
     "path": "^0.12.7",
     "puppeteer": "^23.0.2",
     "set-cookie-parser": "^2.5.1",
