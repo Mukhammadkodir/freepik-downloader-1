@@ -61,6 +61,34 @@ After the download is completed, you will get notification through your webhook 
 
 Download the completed queue by the url ```/v2/queue/download?id=63e75fd1e8e5b664aaa7daf2```
 
+## Telegram Bot Integration
+This project now includes a Telegram bot that allows you to download Freepik assets directly through Telegram without browser popups.
+
+### Setup
+1. Create a Telegram bot using BotFather and get your bot token
+2. Add your bot token to the `.env` file:
+```
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+```
+3. Run the Telegram bot:
+```
+npm run telegram-bot
+```
+
+### Usage
+1. Start a chat with your bot
+2. Send any Freepik premium URL to the bot
+3. The bot will extract the direct download link and send it to you
+4. Click the link to download the file directly
+
+### Supported Asset Types
+The Telegram bot works with all Freepik asset types:
+- **Design Assets**: PSD, AI, Sketch, Figma, Templates, Mockups, Fonts
+- **Images**: Photos, Vectors, Illustrations, Icons
+- **Videos**: MP4, AVI, MOV, Video templates, Motion graphics
+- **Audio**: MP3, WAV, Sound Effects, Music
+
+The bot automatically detects the asset type and extracts the appropriate download link.
 
 ## Integrate with your own system
 You can also integrate this downloader with your own script.
