@@ -12,13 +12,32 @@ import { Downloaded } from '../type';
 const DOWNLOAD_PATH = resolve('./download')
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 
-// selector
-const DOWNLOAD_COUNTER_SELECTOR = '[data-cy="download-counter"], [class*="download-counter"], [class*="download"][class*="count"], div#__next>div:nth-child(2)>div:nth-child(3)>div:nth-child(3)>div:nth-child(1)>div:nth-child(2), [class*="downloads"], [class*="usage"], [class*="quota"], [class*="limit"]'
-const NATIVE_DOWNLOAD_BUTTON_SELECTOR = 'button[data-cy="download-button"], a[data-cy="download-button"], [data-cy="download-button"], button[class*="download"]'
-const SUBSCRIPTION_STATUS_SELECTOR = '*[data-cy="popover-user-my-subscription"]>button>*:nth-child(2), [class*="subscription"]'
-const THUMBNAIL_SELECTOR = '*[data-cy="resource-detail-preview"]>img, [class*="preview"] img'
-const PRE_DOWNLOAD_BUTTON_SELECTOR = 'button[data-cy="wrapper-download-free"]>button, [data-cy="download-free"], button[class*="download"]'
+// Improved selectors for different asset types
+const DOWNLOAD_COUNTER_SELECTORS = [
+    '[data-cy="download-counter"]',
+    '[class*="download-counter"]',
+    '[class*="download"][class*="count"]',
+    '[class*="downloads"]',
+    '[class*="usage"]',
+    '[class*="quota"]',
+    '[class*="limit"]',
+    'div[class*="counter"]',
+    'span[class*="counter"]'
+];
+
+const DOWNLOAD_BUTTON_SELECTORS = [
+    'button[data-cy="download-button"]',
+    '[data-cy="download-button"]',
+    'button[data-cy="premium-download-button"]',
+    '[data-cy="premium-download-button"]',
+    'button[data-testid="download-button"]',
+    '[data-testid="download-button"]',
+    'button[class*="download"]:not([class*="premium"])',
+    'a[class*="download"]:not([class*="premium"])'
+];
+
 const SIGN_IN_BUTTON_SELECTOR = '*[data-cy="signin-button"], [class*="signin"], [class*="login"]'
+const THUMBNAIL_SELECTOR = '*[data-cy="resource-detail-preview"]>img, [class*="preview"] img'
 
 let browser: Browser
 let page: Page
@@ -88,17 +107,7 @@ const sleep = async (duration: number) => {
 
 const getCounter = async () => {
     // Try multiple approaches to find the download counter
-    const selectors = [
-        DOWNLOAD_COUNTER_SELECTOR,
-        '[data-cy="download-counter"]',
-        '[class*="download-counter"]',
-        '[class*="download"][class*="count"]',
-        'div#__next>div:nth-child(2)>div:nth-child(3)>div:nth-child(3)>div:nth-child(1)>div:nth-child(2)',
-        '[class*="downloads"]',
-        '[class*="usage"]',
-        '[class*="quota"]',
-        '[class*="limit"]'
-    ];
+    const selectors = DOWNLOAD_COUNTER_SELECTORS;
 
     let elementFound = false;
     let counterRaw = null;
@@ -179,12 +188,100 @@ const getCounter = async () => {
     return counter as [number, number];
 }
 
+/**
+ * Detects the asset type from the URL
+ */
+const detectAssetType = (url: string): string => {
+    if (url.includes('/icon/')) return 'icon';
+    if (url.includes('/video/') || url.includes('premium-video') || url.includes('free-video')) return 'video';
+    if (url.includes('/3d-model/') || url.includes('3d-models')) return '3d';
+    if (url.includes('/audio/') || url.includes('premium-audio') || url.includes('free-audio')) return 'audio';
+    if (url.includes('/font/')) return 'font';
+    if (url.includes('/psd/') || url.includes('premium-psd') || url.includes('free-psd')) return 'psd';
+    if (url.includes('/vector/') || url.includes('premium-vector') || url.includes('free-vector')) return 'vector';
+    if (url.includes('/photo/') || url.includes('premium-photo') || url.includes('free-photo')) return 'photo';
+    if (url.includes('/template/') || url.includes('premium-template') || url.includes('free-template')) return 'template';
+    if (url.includes('/mockup/') || url.includes('premium-mockup') || url.includes('free-mockup')) return 'mockup';
+    return 'unknown';
+}
+
+/**
+ * Improved download button clicking based on asset type
+ */
+const clickDownloadButtonForAssetType = async (assetType: string) => {
+    console.log(`Attempting to click download button for ${assetType} asset...`);
+    
+    const clickResult = await page.evaluate((assetType, selectors) => {
+        console.log(`Looking for download buttons for ${assetType}`);
+        
+        // Try the standard download button selectors first
+        for (const selector of selectors) {
+            const elements = document.querySelectorAll(selector);
+            console.log(`Found ${elements.length} elements with selector: ${selector}`);
+            
+            for (let i = 0; i < elements.length; i++) {
+                const element = elements[i] as HTMLElement;
+                const style = window.getComputedStyle(element);
+                const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
+                
+                if (isVisible) {
+                    const text = element.textContent || '';
+                    console.log(`Clicking element with selector: ${selector}, text: "${text}"`);
+                    element.click();
+                    return true;
+                }
+            }
+        }
+        
+        // Asset-specific fallbacks
+        if (assetType === 'icon') {
+            // For icons, try to click arrow button first, then SVG
+            const arrowButton = document.querySelector('button[data-cy="download-arrow-button"]');
+            if (arrowButton) {
+                const element = arrowButton as HTMLElement;
+                const style = window.getComputedStyle(element);
+                const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
+                
+                if (isVisible) {
+                    console.log('Clicking download arrow button for icon');
+                    element.click();
+                    return true;
+                }
+            }
+        }
+        
+        // General fallback: Look for any button with download-related text
+        const allButtons = Array.from(document.querySelectorAll('button, a'));
+        for (const button of allButtons) {
+            const element = button as HTMLElement;
+            const style = window.getComputedStyle(element);
+            const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
+            const text = (element.textContent || '').toLowerCase();
+            
+            // Look for download buttons, but exclude premium/upgrade buttons
+            if (isVisible && text.includes('download') && !text.includes('premium') && !text.includes('upgrade')) {
+                console.log(`Clicking download button found by text: "${text}"`);
+                element.click();
+                return true;
+            }
+        }
+        
+        return false;
+    }, assetType, DOWNLOAD_BUTTON_SELECTORS);
+    
+    return clickResult;
+};
+
 export const downloadByUrl = async (url: string, cookiesObject?: object): Promise<Downloaded> => {
     if (!browser) {
         await boot()
     }
 
     await setCookie(cookiesObject)
+    
+    // Detect asset type
+    const assetType = detectAssetType(url);
+    console.log(`Detected asset type: ${assetType}`);
 
     try {
         // Check subscription status first
@@ -236,33 +333,66 @@ export const downloadByUrl = async (url: string, cookiesObject?: object): Promis
         
         const requestHandler = (request) => {
             const reqUrl = request.request.url;
-            // Log ALL network requests to see what's happening
-            console.log('Network request:', reqUrl.substring(0, 100)); // Limit URL length for cleaner logs
             
-            // Check if this is a download URL from freepik's CDN
-            if (reqUrl.includes('downloadscdn')) {
-                console.log('*** INTERCEPTED DOWNLOAD CDN URL:', reqUrl);
-                console.log('Request headers:', JSON.stringify(request.request.headers, null, 2));
-                interceptedUrl = reqUrl;
-                // Capture headers for the direct download
-                interceptedHeaders = request.request.headers;
-                // Capture cookies
-                if (request.request.headers && request.request.headers['cookie']) {
-                    interceptedCookies = request.request.headers['cookie'];
+            // Skip if we already found a good URL
+            if (interceptedUrl) return;
+            
+            // Log relevant network requests
+            if (reqUrl.includes('freepik') || reqUrl.includes('flaticon') || reqUrl.includes('cdn')) {
+                console.log('Network request:', reqUrl.substring(0, 150));
+            }
+            
+            // Define CDN patterns for different asset types
+            const cdnPatterns = {
+                icon: ['cdn-icons.flaticon.com', 'flaticon.com/svg'],
+                video: ['videocdn.cdnpk.net', 'downloadscdn'],
+                '3d': ['downloadscdn', '3d.cdnpk.net'],
+                audio: ['audiocdn.cdnpk.net', 'downloadscdn'],
+                default: ['downloadscdn', 'videocdn.cdnpk.net', 'audiocdn.cdnpk.net', 'cdn-icons.flaticon.com']
+            };
+            
+            const patterns = cdnPatterns[assetType] || cdnPatterns.default;
+            const isFromCDN = patterns.some(pattern => reqUrl.includes(pattern));
+            
+            if (isFromCDN) {
+                // Define file extensions for different asset types
+                const fileExtensions = {
+                    icon: ['.svg', '.png', '.ico'],
+                    video: ['.mp4', '.mov', '.avi', '.webm', '.zip'],
+                    '3d': ['.zip', '.obj', '.fbx', '.blend'],
+                    audio: ['.mp3', '.wav', '.aac', '.zip'],
+                    default: ['.zip', '.rar', '.psd', '.jpg', '.png', '.svg', '.mp4', '.mov', '.mp3', '.wav']
+                };
+                
+                const extensions = fileExtensions[assetType] || fileExtensions.default;
+                const hasValidExtension = extensions.some(ext => reqUrl.includes(ext));
+                
+                if (hasValidExtension) {
+                    console.log(`*** CAPTURED ${assetType.toUpperCase()} DOWNLOAD URL:`, reqUrl);
+                    interceptedUrl = reqUrl;
+                    interceptedHeaders = request.request.headers;
+                    if (request.request.headers && request.request.headers['cookie']) {
+                        interceptedCookies = request.request.headers['cookie'];
+                    }
+                    return;
                 }
             }
             
-            // Also check for any URLs that might contain download-related terms
-            const downloadTerms = ['download', 'asset', 'file', '.zip', '.rar', '.psd'];
-            if (downloadTerms.some(term => reqUrl.toLowerCase().includes(term))) {
-                console.log('*** POTENTIAL DOWNLOAD URL:', reqUrl);
+            // Fallback for any download URL
+            if (reqUrl.includes('downloadscdn') || reqUrl.includes('download')) {
+                interceptedUrl = reqUrl;
+                interceptedHeaders = request.request.headers;
+                if (request.request.headers && request.request.headers['cookie']) {
+                    interceptedCookies = request.request.headers['cookie'];
+                }
+                console.log('*** FALLBACK DOWNLOAD URL CAPTURED:', reqUrl);
             }
         };
         
         client.on('Network.requestWillBeSent', requestHandler);
 
         // Wait for potential download buttons to appear
-        await page.waitForSelector('button[data-cy="download-button"]', { timeout: 10000 }).catch(() => {
+        await page.waitForSelector('button', { timeout: 10000 }).catch(() => {
             console.log('Download button not found immediately, continuing anyway');
         });
         
@@ -270,83 +400,8 @@ export const downloadByUrl = async (url: string, cookiesObject?: object): Promis
         await page.screenshot({ path: 'debug-page.png', fullPage: true });
         console.log('Saved page screenshot to debug-page.png');
         
-        // Log all buttons on the page
-        const buttons = await page.evaluate(() => {
-            const buttons = Array.from(document.querySelectorAll('button'));
-            return buttons.map((btn, index) => ({
-                index,
-                text: btn.textContent ? btn.textContent.trim().substring(0, 50) : '',
-                className: btn.className.substring(0, 100),
-                dataCy: btn.getAttribute('data-cy') || '',
-                id: btn.id,
-                isVisible: (btn as HTMLElement).offsetParent !== null
-            }));
-        });
-        
-        console.log('Found', buttons.length, 'buttons on the page');
-        buttons.forEach((btn, index) => {
-            if (btn.text.toLowerCase().includes('download') || btn.dataCy.includes('download') || btn.className.includes('download')) {
-                console.log('Potential download button:', btn);
-            }
-        });
-        
-        // Try clicking with the specific selectors from user's data
-        console.log('Attempting to click download button');
-        const clickResult = await page.evaluate(() => {
-            // Log the entire document structure around potential download buttons
-            console.log('Document body innerHTML length:', document.body.innerHTML.length);
-            
-            // Try the exact selectors from the user's provided CSS
-            const selectors = [
-                'button[data-cy="download-button"]',
-                'button.flex.items-center.gap-2.p-2.text-surface-foreground-3',
-                '[data-cy="dropdown-download-type"]',
-                'button.text-surface-foreground-3:nth-child(1) > svg:nth-child(1)'
-            ];
-            
-            for (const selector of selectors) {
-                try {
-                    const elements = document.querySelectorAll(selector);
-                    console.log(`Found ${elements.length} elements with selector: ${selector}`);
-                    
-                    for (let i = 0; i < elements.length; i++) {
-                        const element = elements[i] as HTMLElement;
-                        // Check if element is visible
-                        const style = window.getComputedStyle(element);
-                        const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
-                        
-                        console.log(`Element ${i} visibility - display: ${style.display}, visibility: ${style.visibility}, offsetParent: ${element.offsetParent !== null}`);
-                        
-                        if (isVisible) {
-                            console.log('Clicking download button with selector:', selector);
-                            console.log('Button text:', element.textContent);
-                            console.log('Button HTML:', element.outerHTML.substring(0, 200));
-                            element.click();
-                            return true;
-                        }
-                    }
-                } catch (e) {
-                    console.log('Selector failed:', selector, e.message);
-                }
-            }
-            
-            // Last resort: try to find any button with "Download" text
-            const allButtons = Array.from(document.querySelectorAll('button'));
-            for (const button of allButtons) {
-                const text = button.textContent || '';
-                const style = window.getComputedStyle(button);
-                const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && (button as HTMLElement).offsetParent !== null;
-                
-                if (text.toLowerCase().includes('download') && isVisible) {
-                    console.log('Clicking download button found by text:', text);
-                    console.log('Button HTML:', button.outerHTML.substring(0, 200));
-                    (button as HTMLElement).click();
-                    return true;
-                }
-            }
-            
-            return false;
-        });
+        // Use the improved download button clicking logic
+        const clickResult = await clickDownloadButtonForAssetType(assetType);
         
         if (!clickResult) {
             console.log('Failed to click download button, but continuing to wait for intercepted URL');
@@ -438,3 +493,5 @@ function refreshCookie(cookie: Protocol.Network.GetAllCookiesResponse) {
 
     console.info('cookie refreshed')
 }
+
+export { downloadByUrl }
