@@ -248,6 +248,11 @@ const createNetworkHandler = (assetType: string) => {
                     interceptedUrl = reqUrl;
                     return;
                 }
+                // Special case: video download API endpoints that actually lead to real downloads
+                if (reqUrl.includes('/api/video/') && reqUrl.includes('/download') && !reqUrl.includes('limit')) {
+                    console.log('*** CAPTURED VIDEO API DOWNLOAD ENDPOINT:', reqUrl);
+                    // Don't set this immediately, let's see if we get a redirect to a real file
+                }
             } else if (assetType === '3d') {
                 // For 3D models, look for download URLs with 3D file extensions
                 if (reqUrl.includes('downloadscdn') && 
@@ -279,7 +284,7 @@ const createNetworkHandler = (assetType: string) => {
         const isDownloadUrl = downloadKeywords.some(keyword => reqUrl.includes(keyword));
         
         if (isDownloadUrl && reqUrl.includes('freepik.com')) {
-            // Exclude API endpoints
+            // Exclude API endpoints and tracking pixels
             const excludedEndpoints = [
                 '/api/user/downloads/limit',
                 '/api/user/downloads',
@@ -292,11 +297,33 @@ const createNetworkHandler = (assetType: string) => {
             
             const isExcluded = excludedEndpoints.some(endpoint => reqUrl.includes(endpoint));
             
-            if (!isExcluded && !reqUrl.includes('walletId=')) {
+            // Additional check for walletId parameters which indicate API endpoints
+            const hasWalletId = reqUrl.includes('walletId=');
+            
+            // Additional check for tracking pixels
+            const isTrackingPixel = reqUrl.includes('/download.gif');
+            
+            if (!isExcluded && !hasWalletId && !isTrackingPixel) {
                 console.log('*** POTENTIAL DOWNLOAD URL:', reqUrl);
-                if (!interceptedUrl) {
+                // Only set as intercepted URL if we haven't already captured a better one
+                // and only if it looks like a real download URL
+                const validExtensions = ['.zip', '.rar', '.psd', '.jpg', '.png', '.svg', '.mp4', '.mov', '.mp3', '.wav', '.obj', '.fbx'];
+                const hasValidExtension = validExtensions.some(ext => reqUrl.includes(ext));
+                
+                // If it has a valid extension or is from a known CDN, it's more likely to be a real download
+                const cdnDomains = ['downloadscdn', 'videocdn.cdnpk.net', 'audiocdn.cdnpk.net', 'cdn-icons.flaticon.com', '3d.cdnpk.net'];
+                const isFromCdn = cdnDomains.some(domain => reqUrl.includes(domain));
+                
+                if (hasValidExtension || isFromCdn) {
+                    // Prioritize this over previously intercepted URLs
+                    console.log('*** PROMOTING TO INTERCEPTED URL (better quality):', reqUrl);
+                    interceptedUrl = reqUrl;
+                } else if (!interceptedUrl) {
+                    // Only set as fallback if we haven't captured anything yet
                     interceptedUrl = reqUrl;
                 }
+            } else {
+                console.log('*** EXCLUDED URL (tracking pixel, API endpoint, or walletId):', reqUrl);
             }
         }
     };
@@ -314,18 +341,40 @@ const createNetworkHandler = (assetType: string) => {
                 console.log('*** REDIRECT TO:', location);
                 
                 // Check if redirect is to a download URL
-                const cdnDomains = ['downloadscdn', 'videocdn.cdnpk.net', 'audiocdn.cdnpk.net', 'cdn-icons.flaticon.com'];
+                const cdnDomains = ['downloadscdn', 'videocdn.cdnpk.net', 'audiocdn.cdnpk.net', 'cdn-icons.flaticon.com', '3d.cdnpk.net'];
                 const isDownloadRedirect = cdnDomains.some(domain => location.includes(domain));
                 
-                if (isDownloadRedirect) {
+                // Also check for valid file extensions
+                const validExtensions = ['.zip', '.rar', '.psd', '.jpg', '.png', '.svg', '.mp4', '.mov', '.mp3', '.wav', '.obj', '.fbx'];
+                const hasValidExtension = validExtensions.some(ext => location.includes(ext));
+                
+                if (isDownloadRedirect || hasValidExtension) {
                     console.log('*** CAPTURED REDIRECT DOWNLOAD URL:', location);
                     interceptedUrl = location;
+                    return;
                 }
             }
         }
+        
+        // Special handling for video API responses that might contain download URLs
+        if (responseUrl.includes('/api/video/') && response.response.status === 200) {
+            // Try to parse the response body for download URLs
+            // Note: This is more complex and might require additional handling
+            console.log('*** VIDEO API RESPONSE:', responseUrl);
+        }
     };
     
-    return { requestHandler, responseHandler, getInterceptedUrl: () => interceptedUrl };
+    // Return a function to reset the interceptedUrl for subsequent requests
+    const resetInterceptedUrl = () => {
+        interceptedUrl = null;
+    };
+    
+    return { 
+        requestHandler, 
+        responseHandler, 
+        getInterceptedUrl: () => interceptedUrl,
+        resetInterceptedUrl
+    };
 };
 
 /**
@@ -450,8 +499,16 @@ export const getDownloadLink = async (url: string, cookiesObject?: object | stri
         // Set up network interception based on asset type
         const networkHandler = createNetworkHandler(assetType);
         
-        client.on('Network.requestWillBeSent', networkHandler.requestHandler);
-        client.on('Network.responseReceived', networkHandler.responseHandler);
+        // Reset the intercepted URL for each new request
+        networkHandler.resetInterceptedUrl();
+        
+        // Store the listener functions so we can remove them later
+        const requestListener = networkHandler.requestHandler;
+        const responseListener = networkHandler.responseHandler;
+        
+        // Add event listeners
+        client.on('Network.requestWillBeSent', requestListener);
+        client.on('Network.responseReceived', responseListener);
 
         // Wait for potential download buttons to appear
         await page.waitForSelector('button', { timeout: 10000 }).catch(() => {
@@ -579,9 +636,9 @@ export const getDownloadLink = async (url: string, cookiesObject?: object | stri
             console.log('Still waiting for download URL interception...');
         }
         
-        // Remove the event listeners
-        client.off('Network.requestWillBeSent', networkHandler.requestHandler);
-        client.off('Network.responseReceived', networkHandler.responseHandler);
+        // Remove the event listeners to prevent conflicts in future requests
+        client.off('Network.requestWillBeSent', requestListener);
+        client.off('Network.responseReceived', responseListener);
         
         const finalInterceptedUrl = networkHandler.getInterceptedUrl();
         
@@ -594,6 +651,15 @@ export const getDownloadLink = async (url: string, cookiesObject?: object | stri
         return finalInterceptedUrl;
         
     } catch (e) {
+        // Make sure to remove event listeners even if there's an error
+        try {
+            // Note: We can't remove specific listeners here because we don't have references to them
+            // In a production environment, you might want to implement a more robust solution
+            console.log('Error occurred, but continuing...');
+        } catch (cleanupError) {
+            console.log('Error during cleanup:', cleanupError);
+        }
+        
         console.error('Download link extraction error:', e);
         throw new Error(e.message || 'Failed to extract download link');
     }

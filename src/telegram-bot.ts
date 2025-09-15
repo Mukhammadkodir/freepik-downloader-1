@@ -13,14 +13,28 @@ const token = process.env.TELEGRAM_BOT_TOKEN || '7737359947:AAEEEnXlW5UBepDZ_C7Z
 // Create a bot instance
 const bot = new TelegramBot(token, { polling: true });
 
+// Keep track of processing messages to avoid duplicates
+const processingMessages = new Set<string>();
+
 console.log('Freepik Telegram Bot Started...');
 
 // Handle incoming messages
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const messageText = msg.text || '';
+  const messageId = msg.message_id;
   
-  console.log(`Received message from ${chatId}: ${messageText}`);
+  console.log(`Received message from ${chatId}: ${messageText} (ID: ${messageId})`);
+  
+  // Check if we're already processing this message
+  const messageKey = `${chatId}-${messageId}`;
+  if (processingMessages.has(messageKey)) {
+    console.log(`Skipping duplicate message ${messageId} from chat ${chatId}`);
+    return;
+  }
+  
+  // Mark this message as being processed
+  processingMessages.add(messageKey);
   
   // Check if the message contains a Freepik URL
   if (messageText.includes('freepik.com')) {
@@ -38,14 +52,23 @@ bot.on('message', async (msg) => {
     } catch (error) {
       console.error(`Error processing request for ${chatId}:`, error);
       await bot.sendMessage(chatId, '❌ Sorry, I couldn\'t extract the download link. Please make sure the URL is correct and I have access to a valid Freepik premium account.');
+    } finally {
+      // Remove the message from processing set
+      processingMessages.delete(messageKey);
     }
   } else if (messageText === '/start') {
     await bot.sendMessage(chatId, '👋 Welcome to the Freepik Downloader Bot!\n\nSend me a Freepik URL and I\'ll give you a direct download link.\n\nExample: https://www.freepik.com/premium-psd/your-design_1234567.htm');
+    // Remove the message from processing set
+    processingMessages.delete(messageKey);
   } else if (messageText === '/help') {
     await bot.sendMessage(chatId, 'ℹ️ Send me any Freepik URL and I\'ll provide a direct download link.\n\nI only work with valid Freepik premium URLs.');
+    // Remove the message from processing set
+    processingMessages.delete(messageKey);
   } else {
     // For any other message, provide help
     await bot.sendMessage(chatId, 'Please send me a valid Freepik URL.\n\nType /help for more information.');
+    // Remove the message from processing set
+    processingMessages.delete(messageKey);
   }
 });
 

@@ -493,5 +493,3 @@ function refreshCookie(cookie: Protocol.Network.GetAllCookiesResponse) {
 
     console.info('cookie refreshed')
 }
-
-export { downloadByUrl }

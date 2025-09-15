@@ -21,9 +21,38 @@ export async function extractFreepikDownloadLink(freepikUrl: string): Promise<st
     
     console.log(`Successfully extracted download link: ${downloadLink}`);
     
-    // Validate that we didn't get an API endpoint
-    if (downloadLink.includes('/api/') || downloadLink.includes('walletId=')) {
-      throw new Error('Extracted link is an API endpoint, not a direct download URL');
+    // Validate that we got a proper download URL, not a tracking pixel or API endpoint
+    const invalidPatterns = [
+      '/api/',
+      'walletId=',
+      '/download.gif', // tracking pixel
+      '/user/downloads/limit'
+    ];
+    
+    const isValidDownloadUrl = !invalidPatterns.some(pattern => downloadLink.includes(pattern));
+    
+    // Additional validation: check if it's from a known CDN
+    const validCdnDomains = [
+      'downloadscdn',
+      'videocdn.cdnpk.net',
+      'audiocdn.cdnpk.net',
+      'cdn-icons.flaticon.com',
+      '3d.cdnpk.net'
+    ];
+    
+    const isFromValidCdn = validCdnDomains.some(domain => downloadLink.includes(domain));
+    
+    // Check for valid file extensions
+    const validExtensions = ['.zip', '.rar', '.psd', '.jpg', '.png', '.svg', '.mp4', '.mov', '.mp3', '.wav', '.obj', '.fbx'];
+    const hasValidExtension = validExtensions.some(ext => downloadLink.includes(ext));
+    
+    if (!isValidDownloadUrl) {
+      throw new Error('Extracted link is an API endpoint or tracking pixel, not a direct download URL');
+    }
+    
+    // If it's not from a valid CDN and doesn't have a valid extension, it's likely not a real download URL
+    if (!isFromValidCdn && !hasValidExtension) {
+      throw new Error('Extracted link does not appear to be a valid download URL');
     }
     
     return downloadLink;
