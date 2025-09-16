@@ -1,0 +1,40 @@
+/* 15px/24px Roboto (Default) */
+body { font: 16px/24px "Roboto", Arial, sans-serif; }
+h1,h2,h3,h4,h5,h6{font-family: "Roboto", Arial, sans-serif;}
+
+.btn{font-size:1em;}
+
+/*menu*/
+.side-menu > li > a{font-size:15px;}
+.side-menu .submenu{font-size:14px;}
+.dropdown-menu{font-size:15px;}
+
+blockquote{font-size:16px;}
+
+/*banner*/
+
+/*catalog*/
+.stickers .stickers-wrapper > div{font-size:10px;line-height: 17px;}
+.main-block .prop_title_table .item .prop-block, .main-block .item .prop-block{font-size:13px;}
+.bx_item_detail_inc_two .list-type-block.item-views .item > .body-info .title{font-size:13px;}
+.item-views .item .price .price_old .price_val, .item-views .item .price .price_old .fa, .order-block .price .price_old .price_val, .order-block .price .price_old .fa{font-size:14px;}
+.item-views .item .price .price_val, .order-block .price .price_val{font-size:18px;}
+.select-outer select{font-size:13px;}
+.item-views.sections .item .title a{}
+body .buy_block .counter input, body .footer-button .buy_block .counter input{height:41px;}
+
+.list-type-block.item-views .item .previewtext{line-height:20px;}
+
+blockquote.danger, blockquote.info, blockquote.code{line-height:28px;}
+
+/*font*/
+body.all_title_2 .item-views.list .item .title, body.all_title_2 .item-views.table .item .title a, body.all_title_2 .module_products_list td.item-name-cell .title,
+body.all_title_2 .item-views.sections .item .title a, body.all_title_2 .wrap_tizer .wrap_outer .inner_text, body.all_title_2 .sections_wrapper .list .item .name, body.all_title_2 .head-block .item-link .title,
+body.all_title_2 .news_block .item .name{font-weight: 500;}
+body.all_title_2 .banners-big .slides .title{font-weight: 500;}
+body.all_title_2 .bx-yandex-view-layout .pane_info_wrapper .pane_info .title_block{font-weight: 500;}
+body.all_title_2 .portfolio.item-views .link .item .top_title, body.all_title_2 .wrap_tizer .preview, body.all_title_2 .float-banners .items .item .title, body.all_title_2 .licenses.item-views.table .item .title,
+body.all_title_2 .tabs .nav.nav-tabs a, body.all_title_2 .accordion-head, body.all_title_2 .banners-small .item .title, body.all_title_2 .title-block-middle, body.all_title_2 .title-block-big,
+body.all_title_2 .item-views.table.with-comments .item .title, body.all_title_2 .item-views.table-elements .item .body-info .title{font-weight: 500;}
+body.all_title_2 .basket .items .item .description .name, body.all_title_2 .basket_order .items>.head .title{font-weight: 500;}
+body.all_title_2 .titles_block, body.all_title_2 .form .form-header .title, body.all_title_2 .dark_table, body.all_title_2 .form.contacts .title, body.all_title_2 .tizers_block2 .item .title .top-text{font-weight: 500;}

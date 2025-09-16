@@ -1,46 +1,41 @@
-import { getDownloadLink, close } from '../src/downloader/link-extractor';
+import { extractFreepikDownloadLink } from '../src/telegram-bot-helper';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-async function quickTest() {
-  console.log('Quick test of download link extraction...');
+async function quickMultipleVideoTest() {
+  console.log('=== QUICK MULTIPLE VIDEO TEST ===');
   
-  // Test a video URL (non-icon)
-  const testUrl = 'https://www.freepik.com/premium-video/person-analyzes-financial-charts-smartphone_6153704#fromView=subhome';
+  // Test just 2 videos quickly
+  const testUrls = [
+    'https://www.freepik.com/premium-video/animation-moving-plants-tree-dark-blue-background_2602788',
+    'https://www.freepik.com/premium-video/gold-bitcoin-btc-isolated-computer-motherboard-background-cryptocurrency-mining-virtual-money_3305744'
+  ];
   
-  try {
-    console.log(`Testing asset: ${testUrl}`);
-    console.log('Using TEST_COOKIE from environment...');
+  for (let i = 0; i < testUrls.length; i++) {
+    const testUrl = testUrls[i];
+    console.log(`\n--- VIDEO ${i + 1}: ${testUrl} ---`);
     
-    // Pass the TEST_COOKIE from environment variables
-    const startTime = Date.now();
-    const downloadLink = await getDownloadLink(testUrl, process.env.TEST_COOKIE as any);
-    const endTime = Date.now();
-    
-    console.log('✅ Download link extracted successfully!');
-    console.log('🔗 Download Link:', downloadLink);
-    console.log(`⏱️  Extraction time: ${endTime - startTime}ms`);
-    
-    // Verify it's a valid download link (not an API endpoint)
-    if (downloadLink.includes('/api/') || downloadLink.includes('walletId=')) {
-      console.log('❌ ERROR: Extracted link is an API endpoint, not a direct download URL');
-      console.log('This indicates the fix is not working properly.');
-    } else if (downloadLink.includes('downloadscdn') || 
-        downloadLink.includes('videocdn.cdnpk.net') || 
-        downloadLink.includes('cdn-icons.flaticon.com')) {
-      console.log('✅ SUCCESS: Link verification passed - URL is from Freepik CDN');
-      console.log('The fix is working correctly!');
-    } else {
-      console.log('⚠️  WARNING: URL may not be from Freepik CDN, manual verification needed');
+    try {
+      const startTime = Date.now();
+      const downloadLink = await extractFreepikDownloadLink(testUrl);
+      const endTime = Date.now();
+      
+      console.log(`✅ SUCCESS in ${endTime - startTime}ms`);
+      console.log(`🔗 ${downloadLink.substring(0, 100)}...`);
+      
+      if (downloadLink.includes('videocdn.cdnpk.net') || downloadLink.includes('downloadscdn')) {
+        console.log('✅ Got proper CDN URL');
+      } else {
+        console.log('❌ Unexpected URL format');
+      }
+      
+    } catch (error) {
+      console.error(`❌ ERROR: ${error.message}`);
     }
-    
-  } catch (error) {
-    console.error('❌ Failed to extract download link:', error.message);
-    console.error('Stack trace:', error.stack);
-  } finally {
-    await close();
   }
+  
+  console.log('\n=== TEST COMPLETE ===');
 }
 
-quickTest();
+quickMultipleVideoTest().catch(console.error);

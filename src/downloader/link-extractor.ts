@@ -78,6 +78,7 @@ const setCookie = async (cookiesObject?: object | string) => {
     await page.setCookie(...cookies);
     await page.cookies(bootUrl);
 
+    // Set user agent to appear more like a real browser
     await page.setUserAgent(USER_AGENT);
 }
 
@@ -92,6 +93,9 @@ const sleep = async (duration: number) => {
 const close = async () => {
     if (browser) {
         await browser.close()
+        browser = null
+        page = null
+        client = null
     }
 }
 
@@ -153,6 +157,76 @@ const getDownloadSelectors = (assetType: string) => {
 
     return typeSpecificSelectors[assetType] || typeSpecificSelectors.default;
 }
+
+/**
+ * Clicks the appropriate download button based on asset type
+ */
+const clickDownloadButton = async (assetType: string, targetPage: Page) => {
+    const selectors = getDownloadSelectors(assetType);
+    
+    console.log(`Attempting to click download button for ${assetType} asset...`);
+    
+    const clickResult = await targetPage.evaluate((selectors, assetType) => {
+        console.log(`Looking for download buttons with ${selectors.length} selectors for ${assetType}`);
+        
+        // Try each selector
+        for (const selector of selectors) {
+            const elements = document.querySelectorAll(selector);
+            console.log(`Found ${elements.length} elements with selector: ${selector}`);
+            
+            for (let i = 0; i < elements.length; i++) {
+                const element = elements[i] as HTMLElement;
+                const style = window.getComputedStyle(element);
+                const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
+                
+                if (isVisible) {
+                    const text = element.textContent || '';
+                    console.log(`Clicking element with selector: ${selector}, text: "${text}"`);
+                    element.click();
+                    return true;
+                }
+            }
+        }
+        
+        // Fallback: Look for any button with download-related text
+        const allButtons = Array.from(document.querySelectorAll('button, a'));
+        for (const button of allButtons) {
+            const element = button as HTMLElement;
+            const style = window.getComputedStyle(element);
+            const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
+            const text = (element.textContent || '').toLowerCase();
+            
+            // Look for download buttons, but exclude premium/upgrade buttons
+            if (isVisible && text.includes('download') && !text.includes('premium') && !text.includes('upgrade')) {
+                console.log(`Clicking download button found by text: "${text}"`);
+                element.click();
+                return true;
+            }
+        }
+        
+        // Special handling for icons - try to click SVG format
+        if (assetType === 'icon') {
+            // Look for format selection buttons
+            const formatButtons = Array.from(document.querySelectorAll('button'));
+            for (const button of formatButtons) {
+                const element = button as HTMLElement;
+                const style = window.getComputedStyle(element);
+                const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
+                const text = (element.textContent || '').trim().toUpperCase();
+                
+                if (isVisible && text === 'SVG') {
+                    console.log('Clicking SVG format button for icon');
+                    element.click();
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }, selectors, assetType);
+    
+    return clickResult;
+};
 
 /**
  * Improved network request handler that captures download URLs for all asset types
@@ -378,87 +452,28 @@ const createNetworkHandler = (assetType: string) => {
 };
 
 /**
- * Clicks the appropriate download button based on asset type
- */
-const clickDownloadButton = async (assetType: string) => {
-    const selectors = getDownloadSelectors(assetType);
-    
-    console.log(`Attempting to click download button for ${assetType} asset...`);
-    
-    const clickResult = await page.evaluate((selectors, assetType) => {
-        console.log(`Looking for download buttons with ${selectors.length} selectors for ${assetType}`);
-        
-        // Try each selector
-        for (const selector of selectors) {
-            const elements = document.querySelectorAll(selector);
-            console.log(`Found ${elements.length} elements with selector: ${selector}`);
-            
-            for (let i = 0; i < elements.length; i++) {
-                const element = elements[i] as HTMLElement;
-                const style = window.getComputedStyle(element);
-                const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
-                
-                if (isVisible) {
-                    const text = element.textContent || '';
-                    console.log(`Clicking element with selector: ${selector}, text: "${text}"`);
-                    element.click();
-                    return true;
-                }
-            }
-        }
-        
-        // Fallback: Look for any button with download-related text
-        const allButtons = Array.from(document.querySelectorAll('button, a'));
-        for (const button of allButtons) {
-            const element = button as HTMLElement;
-            const style = window.getComputedStyle(element);
-            const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
-            const text = (element.textContent || '').toLowerCase();
-            
-            // Look for download buttons, but exclude premium/upgrade buttons
-            if (isVisible && text.includes('download') && !text.includes('premium') && !text.includes('upgrade')) {
-                console.log(`Clicking download button found by text: "${text}"`);
-                element.click();
-                return true;
-            }
-        }
-        
-        // Special handling for icons - try to click SVG format
-        if (assetType === 'icon') {
-            // Look for format selection buttons
-            const formatButtons = Array.from(document.querySelectorAll('button'));
-            for (const button of formatButtons) {
-                const element = button as HTMLElement;
-                const style = window.getComputedStyle(element);
-                const isVisible = style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null;
-                const text = (element.textContent || '').trim().toUpperCase();
-                
-                if (isVisible && text === 'SVG') {
-                    console.log('Clicking SVG format button for icon');
-                    element.click();
-                    return true;
-                }
-            }
-        }
-        
-        return false;
-    }, selectors, assetType);
-    
-    return clickResult;
-};
-
-/**
  * Extracts the direct download link for a Freepik asset without downloading the file
  * @param url The Freepik asset URL
  * @param cookiesObject Optional cookies object or cookie string
  * @returns The direct download URL
  */
 export const getDownloadLink = async (url: string, cookiesObject?: object | string): Promise<string> => {
-    if (!browser) {
-        await boot()
+    // Always completely close and recreate browser for each request
+    // This ensures no state leakage between requests
+    if (browser) {
+        try {
+            await browser.close();
+        } catch (e) {
+            console.log('Error closing browser:', e);
+        }
+        browser = null;
+        page = null;
+        client = null;
     }
-
-    await setCookie(cookiesObject)
+    
+    // Boot fresh browser instance
+    await boot();
+    await setCookie(cookiesObject);
 
     try {
         console.log(`Navigating to Freepik URL: ${url}`);
@@ -616,7 +631,7 @@ export const getDownloadLink = async (url: string, cookiesObject?: object | stri
             }
         } else {
             // For non-icon assets, use the standard download button approach
-            const clickResult = await clickDownloadButton(assetType);
+            const clickResult = await clickDownloadButton(assetType, page);
             
             if (clickResult) {
                 console.log(`Successfully clicked download button for ${assetType}`);
@@ -651,17 +666,20 @@ export const getDownloadLink = async (url: string, cookiesObject?: object | stri
         return finalInterceptedUrl;
         
     } catch (e) {
-        // Make sure to remove event listeners even if there's an error
-        try {
-            // Note: We can't remove specific listeners here because we don't have references to them
-            // In a production environment, you might want to implement a more robust solution
-            console.log('Error occurred, but continuing...');
-        } catch (cleanupError) {
-            console.log('Error during cleanup:', cleanupError);
-        }
-        
         console.error('Download link extraction error:', e);
         throw new Error(e.message || 'Failed to extract download link');
+    } finally {
+        // Always close browser completely after each request
+        if (browser) {
+            try {
+                await browser.close();
+            } catch (closeError) {
+                console.log('Error closing browser in finally block:', closeError);
+            }
+            browser = null;
+            page = null;
+            client = null;
+        }
     }
 }
 
